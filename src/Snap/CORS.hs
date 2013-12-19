@@ -1,4 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
+-- | Add <http://www.w3.org/TR/cors/ CORS> (cross-origin resource sharing)
+-- headers to a Snap application. CORS headers can be added either conditionally
+-- or unconditionally to the entire site, or you can apply CORS headers to a
+-- single route.
 module Snap.CORS
   ( -- * Wrappers
     wrapCORS
@@ -10,8 +14,13 @@ module Snap.CORS
     -- * Option Specification
   , CORSOptions(..)
   , defaultOptions
-    
+
+    -- ** Origin lists
   , OriginList(..)
+  , OriginSet, mkOriginSet, origins
+                            
+    -- * Internals
+  , HashableURI(..)
   ) where
 
 import Control.Applicative
@@ -22,13 +31,14 @@ import Data.Hashable (Hashable(..))
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Network.URI (URI (..), URIAuth (..),  parseURI)
 
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as Char8
 import qualified Data.HashSet as HashSet
 import qualified Data.Text as Text
 import qualified Snap
 
-newtype OriginSet = OriginSet (HashSet.HashSet HashableURI)
+-- | A set of origins. RFC 6454 specifies that origins are a scheme, host and
+-- port, so the 'OriginSet' wrapper around a 'HashSet.HashSet' ensures that each
+-- 'URI' constists of nothing more than this.
+newtype OriginSet = OriginSet { origins :: HashSet.HashSet HashableURI }
 
 -- | Used to specify the contents of the @Access-Control-Allow-Origin@ header.
 data OriginList
@@ -38,10 +48,7 @@ data OriginList
   | Nowhere
   -- ^ Do not allow cross-origin requests    
   | Origins OriginSet
-  -- ^ Allow cross-origin requests from these origins. RFC 6454 specifies that
-  -- origins are a scheme, host and port - so it follows that if you specify any
-  -- other parts of a 'URI' this Snaplet will discard this information to meet
-  -- the specification.
+  -- ^ Allow cross-origin requests from these origins.
 
 -- | Specify the options to use when building CORS headers for a response. Most
 -- of these options are 'Snap.Handler' actions to allow you to conditionally
@@ -100,18 +107,8 @@ applyCORS options = void $ runMaybeT $ do
  where
   addHeader k v = Snap.modifyResponse (Snap.addHeader k v)
 
-encodeOriginList :: OriginList -> BS.ByteString
-encodeOriginList Everywhere = Char8.pack "*"
-encodeOriginList Nowhere = Char8.pack "null"
-encodeOriginList (Origins (OriginSet origins)) =
-  if HashSet.null origins
-    then Char8.pack "null"
-    else Char8.intercalate
-           (Char8.singleton ' ')
-           (map (Char8.pack . show) (HashSet.toList origins))
-
-originSet :: [URI] -> OriginSet
-originSet = OriginSet . HashSet.fromList . map (HashableURI . simplifyURI)
+mkOriginSet :: [URI] -> OriginSet
+mkOriginSet = OriginSet . HashSet.fromList . map (HashableURI . simplifyURI)
 
 simplifyURI :: URI -> URI
 simplifyURI uri = uri { uriAuthority = fmap simplifyURIAuth (uriAuthority uri)
@@ -121,6 +118,7 @@ simplifyURI uri = uri { uriAuthority = fmap simplifyURIAuth (uriAuthority uri)
                        }
  where simplifyURIAuth auth = auth { uriUserInfo = "" }
 
+-- | A @newtype@ over 'URI' with a 'Hashable' instance.
 newtype HashableURI = HashableURI URI
   deriving (Eq, Show)
 
