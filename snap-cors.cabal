@@ -23,11 +23,16 @@ cabal-version:       >=1.8
 extra-source-files:
   Changelog.md
 
+source-repository head
+  type: git
+  location: git://github.com/ocharles/snap-cors.git
+
 library
   hs-source-dirs: src
   exposed-modules:
     Snap.CORS
   build-depends:
+    attoparsec >= 0.10 && <0.11,
     base >= 4.5 && < 5,
     bytestring >= 0.10 && < 0.11,
     case-insensitive >= 1.0 && <1.1,

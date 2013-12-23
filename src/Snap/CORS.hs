@@ -20,18 +20,18 @@ module Snap.CORS
   , OriginSet, mkOriginSet, origins
                             
     -- * Internals
-  , HashableURI(..)
+  , HashableURI(..), HashableMethod (..)
   ) where
 
 import Control.Applicative
-import Control.Monad (guard, mzero, void, when)
-import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.Maybe (MaybeT(..))
+import Control.Monad (join, mzero, when)
 import Data.CaseInsensitive (CI)
 import Data.Hashable (Hashable(..))
+import Data.Char (isAlpha)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Network.URI (URI (..), URIAuth (..),  parseURI)
 
+import qualified Data.Attoparsec.Char8 as Attoparsec
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.CaseInsensitive as CI
 import qualified Data.HashSet as HashSet
@@ -67,13 +67,17 @@ data CORSOptions m = CORSOptions
   , corsExposeHeaders :: m (HashSet.HashSet (CI Char8.ByteString))
   -- ^ A list of headers that are exposed to clients. This allows clients to
   -- read the values of these headers, if the response includes them.
+
+  , corsAllowedMethods :: m (HashSet.HashSet HashableMethod)
+  -- ^ A list of request methods that are allowed.
   }
 
 -- | Liberal default options. Specifies that:
 --
 -- * All origins may make cross-origin requests
 -- * @allow-credentials@ is true.
--- * No extra headers beyond simple headers are exposed
+-- * No extra headers beyond simple headers are exposed.
+-- * @GET@, @POST@, @PUT@, @DELETE@ and @HEAD@ are all allowed.
 --
 -- All options are determined unconditionally.
 defaultOptions :: Monad m => CORSOptions m
@@ -81,6 +85,9 @@ defaultOptions = CORSOptions
   { corsAllowOrigin = return Everywhere
   , corsAllowCredentials = return True
   , corsExposeHeaders = return HashSet.empty
+  , corsAllowedMethods =
+      return $ HashSet.fromList $ map HashableMethod
+        [ Snap.GET, Snap.POST, Snap.PUT, Snap.DELETE, Snap.HEAD ]
   }
 
 -- | Apply CORS for every request, unconditionally.
@@ -91,40 +98,87 @@ wrapCORS = wrapCORSWithOptions defaultOptions
 
 -- | Initialize CORS for all requests with specific options.
 wrapCORSWithOptions :: CORSOptions (Snap.Handler b v) -> Snap.Initializer b v ()
-wrapCORSWithOptions options = Snap.wrapSite (applyCORS options >>)
+wrapCORSWithOptions options = Snap.wrapSite (applyCORS options)
 
 -- | Apply CORS headers to a specific request. This is useful if you only have
 -- a single action that needs CORS headers, and you don't want to pay for
 -- conditional checks on every request.
-applyCORS :: Snap.MonadSnap m => CORSOptions m -> m ()
-applyCORS options = void $ runMaybeT $ do
-  origin <- MaybeT $ Snap.getsRequest (Snap.getHeader "Origin")
-  originUri <- MaybeT $ pure $
-    fmap simplifyURI $ parseURI $ Text.unpack $ decodeUtf8 origin
+applyCORS :: Snap.MonadSnap m => CORSOptions m -> m () -> m ()
+applyCORS options m =
+  maybe m corsRequestFrom =<<
+    (join . fmap decodeOrigin <$> getHeader "Origin")
 
-  originList <- lift $ corsAllowOrigin options
+ where
 
-  case originList of
-    Everywhere -> return ()
-    Nowhere -> mzero
-    (Origins (OriginSet xs)) ->
-      guard (HashableURI originUri `HashSet.member` xs)
+  corsRequestFrom origin = do
+    originList <- corsAllowOrigin options
+    if origin `inOriginList` originList
+       then Snap.method Snap.OPTIONS (preflightRequestFrom origin)
+              <|> handleRequestFrom origin
+       else m
 
-  lift $ do
+  preflightRequestFrom origin = do
+    maybeMethod <- fmap (parseMethod . Char8.unpack) <$>
+                     getHeader "Access-Control-Request-Method"
+
+    case maybeMethod of
+      Nothing -> m
+
+      Just method -> do
+        allowedMethods <- corsAllowedMethods options
+     
+        if method `HashSet.member` allowedMethods
+          then do
+            headers <- fmap (maybe HashSet.empty HashSet.fromList . splitCommas)
+                         <$> getHeader "Access-Control-Request-Headers"
+            allowedHeaders <- return (HashSet.empty :: HashSet.HashSet Char8.ByteString)
+
+            if False -- not . HashSet.null $ headers `HashSet.difference` allowedHeaders
+               then return ()
+               else do
+                 addAccessControlAllowOrigin origin
+                 addAccessControlAllowCredentials
+     
+                 commaSepHeader
+                   "Access-Control-Allow-Methods"
+                   (Char8.pack . show) (HashSet.toList allowedMethods)
+     
+          else return ()
+
+  handleRequestFrom origin = do
+    addAccessControlAllowOrigin origin
+    addAccessControlAllowCredentials
+
     exposeHeaders <- corsExposeHeaders options
+    when (not $ HashSet.null exposeHeaders) $
+      commaSepHeader 
+        "Access-Control-Expose-Headers"
+        CI.original (HashSet.toList exposeHeaders)
 
+  addAccessControlAllowOrigin origin =
     addHeader "Access-Control-Allow-Origin"
-              (encodeUtf8 $ Text.pack $ show originUri)
+              (encodeUtf8 $ Text.pack $ show origin)
+
+  addAccessControlAllowCredentials = do
     allowCredentials <- corsAllowCredentials options
     when (allowCredentials) $
       addHeader "Access-Control-Allow-Credentials" "true"
 
-    when (not $ HashSet.null exposeHeaders) $
-      addHeader "Access-Control-Expose-Headers" $
-        Char8.intercalate ", " (map CI.original $ HashSet.toList exposeHeaders)
+  decodeOrigin = fmap simplifyURI . parseURI . Text.unpack . decodeUtf8
 
- where
   addHeader k v = Snap.modifyResponse (Snap.addHeader k v)
+
+  commaSepHeader k f vs = do
+    addHeader k $ Char8.intercalate ", " (map f vs)
+
+  getHeader = Snap.getsRequest . Snap.getHeader
+
+  splitCommas :: Char8.ByteString -> Maybe [HashableMethod]
+  splitCommas =
+    let parser = Attoparsec.many1 (Attoparsec.notChar ',')
+                   `Attoparsec.sepBy1` (Attoparsec.char ',')
+    in fmap (map parseMethod) . Attoparsec.maybeResult .
+         Attoparsec.parse parser . Char8.filter (not . isAlpha)
 
 mkOriginSet :: [URI] -> OriginSet
 mkOriginSet = OriginSet . HashSet.fromList . map (HashableURI . simplifyURI)
@@ -137,9 +191,26 @@ simplifyURI uri = uri { uriAuthority = fmap simplifyURIAuth (uriAuthority uri)
                        }
  where simplifyURIAuth auth = auth { uriUserInfo = "" }
 
+--------------------------------------------------------------------------------
+parseMethod :: String -> HashableMethod
+parseMethod "GET"     = HashableMethod Snap.GET
+parseMethod "POST"    = HashableMethod Snap.POST
+parseMethod "HEAD"    = HashableMethod Snap.HEAD
+parseMethod "PUT"     = HashableMethod Snap.PUT
+parseMethod "DELETE"  = HashableMethod Snap.DELETE
+parseMethod "TRACE"   = HashableMethod Snap.TRACE
+parseMethod "OPTIONS" = HashableMethod Snap.OPTIONS
+parseMethod "CONNECT" = HashableMethod Snap.CONNECT
+parseMethod "PATCH"   = HashableMethod Snap.PATCH
+parseMethod s         = HashableMethod $ Snap.Method (Char8.pack s)
+
+--------------------------------------------------------------------------------
 -- | A @newtype@ over 'URI' with a 'Hashable' instance.
 newtype HashableURI = HashableURI URI
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show HashableURI where
+  show (HashableURI u) = show u
 
 instance Hashable HashableURI where
   hashWithSalt s (HashableURI (URI scheme authority path query fragment)) =
@@ -156,3 +227,30 @@ instance Hashable HashableURI where
           userInfo `hashWithSalt`
           regName `hashWithSalt`
           port
+
+inOriginList :: URI -> OriginList -> Bool
+_ `inOriginList` Nowhere = False
+_ `inOriginList` Everywhere = True
+origin `inOriginList` (Origins (OriginSet xs)) =
+  HashableURI origin `HashSet.member` xs
+
+
+--------------------------------------------------------------------------------
+newtype HashableMethod = HashableMethod Snap.Method
+  deriving (Eq)
+
+instance Hashable HashableMethod where
+  hashWithSalt s (HashableMethod Snap.GET)        = s `hashWithSalt` (0 :: Int)
+  hashWithSalt s (HashableMethod Snap.HEAD)       = s `hashWithSalt` (1 :: Int)
+  hashWithSalt s (HashableMethod Snap.POST)       = s `hashWithSalt` (2 :: Int)
+  hashWithSalt s (HashableMethod Snap.PUT)        = s `hashWithSalt` (3 :: Int)
+  hashWithSalt s (HashableMethod Snap.DELETE)     = s `hashWithSalt` (4 :: Int)
+  hashWithSalt s (HashableMethod Snap.TRACE)      = s `hashWithSalt` (5 :: Int)
+  hashWithSalt s (HashableMethod Snap.OPTIONS)    = s `hashWithSalt` (6 :: Int)
+  hashWithSalt s (HashableMethod Snap.CONNECT)    = s `hashWithSalt` (7 :: Int)
+  hashWithSalt s (HashableMethod Snap.PATCH)      = s `hashWithSalt` (8 :: Int)
+  hashWithSalt s (HashableMethod (Snap.Method m)) =
+    s `hashWithSalt` (9 :: Int) `hashWithSalt` m
+
+instance Show HashableMethod where
+  show (HashableMethod m) = show m
