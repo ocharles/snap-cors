@@ -27,10 +27,13 @@ import Control.Applicative
 import Control.Monad (guard, mzero, void, when)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Maybe (MaybeT(..))
+import Data.CaseInsensitive (CI)
 import Data.Hashable (Hashable(..))
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Network.URI (URI (..), URIAuth (..),  parseURI)
 
+import qualified Data.ByteString.Char8 as Char8
+import qualified Data.CaseInsensitive as CI
 import qualified Data.HashSet as HashSet
 import qualified Data.Text as Text
 import qualified Snap
@@ -59,15 +62,25 @@ data CORSOptions m = CORSOptions
 
   , corsAllowCredentials :: m Bool
   -- ^ Whether or not to allow exposing the response when the omit credentials
-  -- flag is unset.  
+  -- flag is unset.
+
+  , corsExposeHeaders :: m (HashSet.HashSet (CI Char8.ByteString))
+  -- ^ A list of headers that are exposed to clients. This allows clients to
+  -- read the values of these headers, if the response includes them.
   }
 
--- | Liberal default options. Specifies that all origins may make cross-origin
--- requests, allow-credentials is true. Headers are determined unconditionally.
+-- | Liberal default options. Specifies that:
+--
+-- * All origins may make cross-origin requests
+-- * @allow-credentials@ is true.
+-- * No extra headers beyond simple headers are exposed
+--
+-- All options are determined unconditionally.
 defaultOptions :: Monad m => CORSOptions m
 defaultOptions = CORSOptions
   { corsAllowOrigin = return Everywhere
   , corsAllowCredentials = return True
+  , corsExposeHeaders = return HashSet.empty
   }
 
 -- | Apply CORS for every request, unconditionally.
@@ -98,11 +111,17 @@ applyCORS options = void $ runMaybeT $ do
       guard (HashableURI originUri `HashSet.member` xs)
 
   lift $ do
+    exposeHeaders <- corsExposeHeaders options
+
     addHeader "Access-Control-Allow-Origin"
               (encodeUtf8 $ Text.pack $ show originUri)
     allowCredentials <- corsAllowCredentials options
     when (allowCredentials) $
       addHeader "Access-Control-Allow-Credentials" "true"
+
+    when (not $ HashSet.null exposeHeaders) $
+      addHeader "Access-Control-Expose-Headers" $
+        Char8.intercalate ", " (map CI.original $ HashSet.toList exposeHeaders)
 
  where
   addHeader k v = Snap.modifyResponse (Snap.addHeader k v)
