@@ -18,7 +18,7 @@ module Snap.CORS
     -- ** Origin lists
   , OriginList(..)
   , OriginSet, mkOriginSet, origins
-                            
+
     -- * Internals
   , HashableURI(..), HashableMethod (..)
   ) where
@@ -47,9 +47,9 @@ newtype OriginSet = OriginSet { origins :: HashSet.HashSet HashableURI }
 data OriginList
   = Everywhere
   -- ^ Allow any origin to access this resource. Corresponds to
-  -- @Access-Control-Allow-Origin: *@ 
+  -- @Access-Control-Allow-Origin: *@
   | Nowhere
-  -- ^ Do not allow cross-origin requests    
+  -- ^ Do not allow cross-origin requests
   | Origins OriginSet
   -- ^ Allow cross-origin requests from these origins.
 
@@ -105,8 +105,7 @@ wrapCORSWithOptions options = Snap.wrapSite (applyCORS options)
 -- conditional checks on every request.
 applyCORS :: Snap.MonadSnap m => CORSOptions m -> m () -> m ()
 applyCORS options m =
-  maybe m corsRequestFrom =<<
-    (join . fmap decodeOrigin <$> getHeader "Origin")
+  (join . fmap decodeOrigin <$> getHeader "Origin") >>= maybe m corsRequestFrom
 
  where
 
@@ -126,7 +125,7 @@ applyCORS options m =
 
       Just method -> do
         allowedMethods <- corsAllowedMethods options
-     
+
         if method `HashSet.member` allowedMethods
           then do
             headers <- fmap (maybe HashSet.empty HashSet.fromList . splitCommas)
@@ -138,11 +137,11 @@ applyCORS options m =
                else do
                  addAccessControlAllowOrigin origin
                  addAccessControlAllowCredentials
-     
+
                  commaSepHeader
                    "Access-Control-Allow-Methods"
                    (Char8.pack . show) (HashSet.toList allowedMethods)
-     
+
           else return ()
 
   handleRequestFrom origin = do
@@ -151,9 +150,11 @@ applyCORS options m =
 
     exposeHeaders <- corsExposeHeaders options
     when (not $ HashSet.null exposeHeaders) $
-      commaSepHeader 
+      commaSepHeader
         "Access-Control-Expose-Headers"
         CI.original (HashSet.toList exposeHeaders)
+
+    m
 
   addAccessControlAllowOrigin origin =
     addHeader "Access-Control-Allow-Origin"

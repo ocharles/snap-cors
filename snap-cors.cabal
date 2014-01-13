@@ -1,5 +1,5 @@
 name:                snap-cors
-version:             1.1.0
+version:             1.1.1
 synopsis:            Add CORS headers to Snap applications
 description:
   Add CORS (cross-origin resource sharing) headers to Snap applications. This
