@@ -24,13 +24,14 @@ module Snap.CORS
   ) where
 
 import Control.Applicative
-import Control.Monad (join, mzero, when)
+import Control.Monad (join, when)
 import Data.CaseInsensitive (CI)
 import Data.Hashable (Hashable(..))
-import Data.Char (isAlpha)
+import Data.Maybe (fromMaybe)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Network.URI (URI (..), URIAuth (..),  parseURI)
 
+import qualified Data.Attoparsec.Combinator as Attoparsec
 import qualified Data.Attoparsec.Char8 as Attoparsec
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.CaseInsensitive as CI
@@ -70,6 +71,11 @@ data CORSOptions m = CORSOptions
 
   , corsAllowedMethods :: m (HashSet.HashSet HashableMethod)
   -- ^ A list of request methods that are allowed.
+
+  , corsAllowedHeaders :: HashSet.HashSet String -> m (HashSet.HashSet String)
+  -- ^ An action to determine which of the request headers are allowed.
+  -- This action is supplied the parsed contents of
+  -- @Access-Control-Request-Headers@.
   }
 
 -- | Liberal default options. Specifies that:
@@ -78,6 +84,7 @@ data CORSOptions m = CORSOptions
 -- * @allow-credentials@ is true.
 -- * No extra headers beyond simple headers are exposed.
 -- * @GET@, @POST@, @PUT@, @DELETE@ and @HEAD@ are all allowed.
+-- * All request headers are allowed.
 --
 -- All options are determined unconditionally.
 defaultOptions :: Monad m => CORSOptions m
@@ -88,6 +95,7 @@ defaultOptions = CORSOptions
   , corsAllowedMethods =
       return $ HashSet.fromList $ map HashableMethod
         [ Snap.GET, Snap.POST, Snap.PUT, Snap.DELETE, Snap.HEAD ]
+  , corsAllowedHeaders = return
   }
 
 -- | Apply CORS for every request, unconditionally.
@@ -128,21 +136,30 @@ applyCORS options m =
 
         if method `HashSet.member` allowedMethods
           then do
-            headers <- fmap (maybe HashSet.empty HashSet.fromList . splitCommas)
-                         <$> getHeader "Access-Control-Request-Headers"
-            allowedHeaders <- return (HashSet.empty :: HashSet.HashSet Char8.ByteString)
+            maybeHeaders <-
+              fromMaybe (Just HashSet.empty) . fmap splitHeaders
+                <$> getHeader "Access-Control-Request-Headers"
 
-            if False -- not . HashSet.null $ headers `HashSet.difference` allowedHeaders
-               then return ()
-               else do
-                 addAccessControlAllowOrigin origin
-                 addAccessControlAllowCredentials
+            case maybeHeaders of
+              Nothing -> m
+              Just headers -> do
+                allowedHeaders <- corsAllowedHeaders options headers
 
-                 commaSepHeader
-                   "Access-Control-Allow-Methods"
-                   (Char8.pack . show) (HashSet.toList allowedMethods)
+                if not $ HashSet.null $ headers `HashSet.difference` allowedHeaders
+                   then m
+                   else do
+                     addAccessControlAllowOrigin origin
+                     addAccessControlAllowCredentials
 
-          else return ()
+                     commaSepHeader
+                       "Access-Control-Allow-Headers"
+                       Char8.pack (HashSet.toList allowedHeaders)
+
+                     commaSepHeader
+                       "Access-Control-Allow-Methods"
+                       (Char8.pack . show) (HashSet.toList allowedMethods)
+
+          else m
 
   handleRequestFrom origin = do
     addAccessControlAllowOrigin origin
@@ -169,17 +186,20 @@ applyCORS options m =
 
   addHeader k v = Snap.modifyResponse (Snap.addHeader k v)
 
-  commaSepHeader k f vs = do
-    addHeader k $ Char8.intercalate ", " (map f vs)
+  commaSepHeader k f vs =
+    case vs of
+      [] -> return ()
+      _  -> addHeader k $ Char8.intercalate ", " (map f vs)
 
   getHeader = Snap.getsRequest . Snap.getHeader
 
-  splitCommas :: Char8.ByteString -> Maybe [HashableMethod]
-  splitCommas =
-    let parser = Attoparsec.many1 (Attoparsec.notChar ',')
-                   `Attoparsec.sepBy1` (Attoparsec.char ',')
-    in fmap (map parseMethod) . Attoparsec.maybeResult .
-         Attoparsec.parse parser . Char8.filter (not . isAlpha)
+  splitHeaders =
+    let spaces = Attoparsec.many' Attoparsec.space
+        headerC = Attoparsec.satisfy (not . (`elem` " ,"))
+        headerName = Attoparsec.many' headerC
+        header = spaces *> headerName <* spaces
+        parser = HashSet.fromList <$> header `Attoparsec.sepBy` (Attoparsec.char ',')
+    in either (const Nothing) Just . Attoparsec.parseOnly parser
 
 mkOriginSet :: [URI] -> OriginSet
 mkOriginSet = OriginSet . HashSet.fromList . map (HashableURI . simplifyURI)
