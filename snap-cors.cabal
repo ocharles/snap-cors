@@ -32,7 +32,7 @@ library
   exposed-modules:
     Snap.CORS
   build-depends:
-    attoparsec >= 0.10 && <0.11,
+    attoparsec >= 0.10 && <0.12,
     base >= 4.5 && < 5,
     bytestring >= 0.10 && < 0.11,
     case-insensitive >= 1.0 && <1.1,
