@@ -1,3 +1,7 @@
+# 1.2.1
+
+* Increased upper bounds on dependencies
+
 # 1.2
 
 * Added support for pre-flight requests
