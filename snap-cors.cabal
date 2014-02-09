@@ -32,14 +32,14 @@ library
   exposed-modules:
     Snap.CORS
   build-depends:
-    attoparsec >= 0.10 && <0.11,
+    attoparsec >= 0.10 && <0.12,
     base >= 4.5 && < 5,
     bytestring >= 0.10 && < 0.11,
-    case-insensitive >= 1.0 && <1.1,
+    case-insensitive >= 1.0 && <1.2,
     hashable >= 1.1 && <1.3,
     network >= 2.4 && < 2.5,
     snap >= 0.13 && < 0.14,
-    text >= 0.11 && < 0.12,
+    text >= 0.11 && < 1.2,
     transformers >= 0.3 && < 0.4,
     unordered-containers >= 0.2 && <0.3
   ghc-options: -Wall
