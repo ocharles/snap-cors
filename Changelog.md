@@ -1,3 +1,7 @@
+# 1.2.2
+
+* Increased upper bound on case-insensitive. Thanks to Ricky Elrod (@CodeBlock).
+
 # 1.2.1
 
 * Increased upper bounds on dependencies
