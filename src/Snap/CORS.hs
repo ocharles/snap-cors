@@ -111,6 +111,16 @@ wrapCORSWithOptions options = Snap.wrapSite (applyCORS options)
 -- | Apply CORS headers to a specific request. This is useful if you only have
 -- a single action that needs CORS headers, and you don't want to pay for
 -- conditional checks on every request.
+--
+-- You should note that 'applyCORS' needs to be used before you add any
+-- 'Snap.method' combinators. For example, the following won't do what you want:
+--
+-- > method POST $ applyCORS defaultOptions $ myHandler
+--
+-- This fails to work as CORS requires an @OPTIONS@ request in the preflighting
+-- stage, but this would get filtered out. Instead, use
+--
+-- > applyCORS defaultOptions $ method POST $ myHandler
 applyCORS :: Snap.MonadSnap m => CORSOptions m -> m () -> m ()
 applyCORS options m =
   (join . fmap decodeOrigin <$> getHeader "Origin") >>= maybe m corsRequestFrom

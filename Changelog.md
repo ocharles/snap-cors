@@ -1,3 +1,8 @@
+# 1.2.3
+
+* Added a bit more documentation to `applyCORS`. Thanks to Alfredo Di Napoli for
+  discovering this tricky behaviour.
+
 # 1.2.2
 
 * Increased upper bound on case-insensitive. Thanks to Ricky Elrod (@CodeBlock).
