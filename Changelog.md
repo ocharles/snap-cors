@@ -1,3 +1,7 @@
+# 1.2.4
+
+* Increased upper bound on `network`.
+
 # 1.2.3
 
 * Added a bit more documentation to `applyCORS`. Thanks to Alfredo Di Napoli for
