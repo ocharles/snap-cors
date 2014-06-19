@@ -1,5 +1,5 @@
 name:                snap-cors
-version:             1.2.4
+version:             1.2.5
 synopsis:            Add CORS headers to Snap applications
 description:
   Add CORS (cross-origin resource sharing) headers to Snap applications. This
@@ -32,7 +32,7 @@ library
   exposed-modules:
     Snap.CORS
   build-depends:
-    attoparsec >= 0.10 && <0.12,
+    attoparsec >= 0.10 && <0.13,
     base >= 4.5 && < 5,
     bytestring >= 0.10 && < 0.11,
     case-insensitive >= 1.0 && <1.3,

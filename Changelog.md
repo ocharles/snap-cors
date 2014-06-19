@@ -1,3 +1,7 @@
+# 1.2.5
+
+* Increased upper bound `attoparsec`.
+
 # 1.2.4
 
 * Increased upper bound on `network`.
