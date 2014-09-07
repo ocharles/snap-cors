@@ -32,7 +32,7 @@ import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Network.URI (URI (..), URIAuth (..),  parseURI)
 
 import qualified Data.Attoparsec.Combinator as Attoparsec
-import qualified Data.Attoparsec.Char8 as Attoparsec
+import qualified Data.Attoparsec.ByteString.Char8 as Attoparsec
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.CaseInsensitive as CI
 import qualified Data.HashSet as HashSet

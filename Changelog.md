@@ -1,3 +1,7 @@
+# 1.2.5.1
+
+* Address deprecation warning from `attoparsec`.
+
 # 1.2.5
 
 * Increased upper bound `attoparsec`.
