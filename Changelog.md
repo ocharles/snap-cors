@@ -1,3 +1,7 @@
+# 1.2.6
+
+* Increased upper bounds on `network`, `text` and `transformers`.
+
 # 1.2.5.1
 
 * Address deprecation warning from `attoparsec`.
