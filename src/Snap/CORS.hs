@@ -205,7 +205,7 @@ applyCORS options m =
 
   splitHeaders =
     let spaces = Attoparsec.many' Attoparsec.space
-        headerC = Attoparsec.satisfy (not . (`elem` " ,"))
+        headerC = Attoparsec.satisfy (not . (`elem`( " ," :: String)))
         headerName = Attoparsec.many' headerC
         header = spaces *> headerName <* spaces
         parser = HashSet.fromList <$> header `Attoparsec.sepBy` (Attoparsec.char ',')
