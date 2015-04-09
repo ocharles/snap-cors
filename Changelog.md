@@ -1,3 +1,12 @@
+# 1.2.8
+
+* Now compiles with Snap 0.14.
+
+# 1.2.7
+
+* Now compiles with GHC 7.10. Thanks to Philip Joseph (@lambdahands) for fixing
+  this.
+
 # 1.2.6
 
 * Increased upper bounds on `network`, `text` and `transformers`.
