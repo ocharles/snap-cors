@@ -1,3 +1,7 @@
+# 1.2.9
+
+* Increased upper-bound on `attoparsec`.
+
 # 1.2.8
 
 * Now compiles with Snap 0.14.
