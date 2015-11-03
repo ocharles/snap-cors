@@ -4,12 +4,9 @@
 -- or unconditionally to the entire site, or you can apply CORS headers to a
 -- single route.
 module Snap.CORS
-  ( -- * Wrappers
-    wrapCORS
-  , wrapCORSWithOptions
-
-  -- * Applying CORS to a specific response
-  , applyCORS
+  (
+    -- * Applying CORS to a specific response
+    applyCORS
 
     -- * Option Specification
   , CORSOptions(..)
@@ -37,7 +34,7 @@ import qualified Data.ByteString.Char8 as Char8
 import qualified Data.CaseInsensitive as CI
 import qualified Data.HashSet as HashSet
 import qualified Data.Text as Text
-import qualified Snap
+import qualified Snap.Core as Snap
 
 -- | A set of origins. RFC 6454 specifies that origins are a scheme, host and
 -- port, so the 'OriginSet' wrapper around a 'HashSet.HashSet' ensures that each
@@ -98,15 +95,6 @@ defaultOptions = CORSOptions
   , corsAllowedHeaders = return
   }
 
--- | Apply CORS for every request, unconditionally.
---
--- 'wrapCors' ≡ 'wrapCORSWithOptions' 'defaultOptions'
-wrapCORS :: Snap.Initializer b v ()
-wrapCORS = wrapCORSWithOptions defaultOptions
-
--- | Initialize CORS for all requests with specific options.
-wrapCORSWithOptions :: CORSOptions (Snap.Handler b v) -> Snap.Initializer b v ()
-wrapCORSWithOptions options = Snap.wrapSite (applyCORS options)
 
 -- | Apply CORS headers to a specific request. This is useful if you only have
 -- a single action that needs CORS headers, and you don't want to pay for
