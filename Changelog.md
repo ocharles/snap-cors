@@ -1,3 +1,7 @@
+# 1.2.10
+
+* Increased upper-bound on `snap`.
+
 # 1.2.9
 
 * Increased upper-bound on `attoparsec`.
