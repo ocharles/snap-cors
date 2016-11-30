@@ -1,3 +1,7 @@
+# 1.2.11
+
+* Dropped dependency on `transformers`.
+
 # 1.2.10
 
 * Increased upper-bound on `snap`.
