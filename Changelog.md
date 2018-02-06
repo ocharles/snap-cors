@@ -1,3 +1,7 @@
+# 1.3.0
+
+* Now just re-exports `Snap.Util.CORS`.
+
 # 1.2.11
 
 * Dropped dependency on `transformers`.
